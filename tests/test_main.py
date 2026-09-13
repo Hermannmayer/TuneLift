@@ -14,6 +14,16 @@ import pytest
 import main
 
 
+@pytest.fixture(autouse=True)
+def _no_bitrate_probe(monkeypatch):
+    """默认让码率探测返回「读不到」。
+
+    一是测试不该真的去起 ffmpeg 进程，二是「读不到就按用户选的来」本身也是
+    要固定的行为。需要验证码率钳制的用例会自己覆盖 probe_bitrate。
+    """
+    monkeypatch.setattr(main, "probe_bitrate", lambda *args, **kwargs: None)
+
+
 # --------------------------------------------------------------------------
 # resource_path
 # --------------------------------------------------------------------------
@@ -400,3 +410,54 @@ def test_run_decrypt_leaves_everything_alone_when_nothing_encrypted(tmp_path):
     assert main.run_decrypt(str(src), str(out)) == (0, 0, 0)
     assert not out.exists(), "没有加密文件时不该创建输出目录"
     assert sorted(p.name for p in src.iterdir()) == ["notes.txt", "song.mp3"]
+
+
+# --------------------------------------------------------------------------
+# 码率：可以跟随源文件，但永远不高过源文件
+# --------------------------------------------------------------------------
+def test_parse_kbps_understands_the_usual_forms():
+    assert main.parse_kbps("192k") == 192
+    assert main.parse_kbps("320") == 320
+    assert main.parse_kbps("  128K ") == 128
+    assert main.parse_kbps(main.BITRATE_SOURCE) is None
+    assert main.parse_kbps("随便写的") is None
+
+
+def test_following_the_source_uses_the_sources_bitrate(monkeypatch):
+    monkeypatch.setattr(main, "probe_bitrate", lambda *a, **k: 160)
+    assert main.effective_mp3_bitrate(main.BITRATE_SOURCE, "x.flac", "ffmpeg") == "160k"
+
+
+def test_bitrate_never_exceeds_the_source(monkeypatch):
+    """从有损源往上转没有意义——音质不会变好，文件只会变大。"""
+    monkeypatch.setattr(main, "probe_bitrate", lambda *a, **k: 128)
+    assert main.effective_mp3_bitrate("320k", "x.ogg", "ffmpeg") == "128k"
+
+
+def test_requested_bitrate_survives_when_source_is_higher(monkeypatch):
+    """无损源的码率通常很高（测试曲目是 993k），这时用户选的档位照常生效。"""
+    monkeypatch.setattr(main, "probe_bitrate", lambda *a, **k: 993)
+    assert main.effective_mp3_bitrate("192k", "x.flac", "ffmpeg") == "192k"
+
+
+def test_bitrate_is_clamped_into_the_mp3_range(monkeypatch):
+    monkeypatch.setattr(main, "probe_bitrate", lambda *a, **k: None)
+    assert main.effective_mp3_bitrate("9999k", "x.flac", "ffmpeg") == "320k"
+    assert main.effective_mp3_bitrate("1k", "x.flac", "ffmpeg") == "32k"
+
+
+def test_following_the_source_falls_back_when_it_cannot_be_read(monkeypatch):
+    monkeypatch.setattr(main, "probe_bitrate", lambda *a, **k: None)
+    assert main.effective_mp3_bitrate(main.BITRATE_SOURCE, "x.flac", "ffmpeg") == "192k"
+
+
+def test_process_audio_hands_the_capped_bitrate_to_ffmpeg(tmp_path, fake_convert, monkeypatch):
+    """端到端确认：被压下来的码率真的传给了 ffmpeg，而不是只算不用。"""
+    monkeypatch.setattr(main, "probe_bitrate", lambda *a, **k: 96)
+
+    src, out = tmp_path / "in", tmp_path / "out"
+    src.mkdir()
+    _make_audio(src, "a.ogg")
+
+    main.process_audio_to_mp3(str(src), str(out), "ffmpeg", bitrate="320k")
+    assert fake_convert[0][2] == "96k"

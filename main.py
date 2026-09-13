@@ -17,6 +17,7 @@
 import argparse
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -43,6 +44,13 @@ FFMPEG_BINARY = "ffmpeg.exe"
 
 # 加密格式与还原后格式的对应关系：mflac 是无损，mgg 是 OGG。
 RESTORED_SUFFIX = {".mflac": ".flac", ".mgg": ".ogg"}
+
+# -b 的取值：给 "source" 表示跟随源文件自身的码率。
+BITRATE_SOURCE = "source"
+# MP3 的可用范围。低于 32k 基本没法听，320k 是 MPEG-1 Layer III 的上限。
+MIN_MP3_KBPS = 32
+MAX_MP3_KBPS = 320
+DEFAULT_KBPS = 192
 
 
 class TuneLiftError(RuntimeError):
@@ -267,6 +275,75 @@ def run_decrypt(input_path: str, flac_output_dir: str) -> tuple[int, int, int]:
     return decrypted, failed, reused
 
 
+def parse_kbps(value: str) -> int | None:
+    """把 '192k' / '192' 解析成 192。
+
+    返回 None 表示「跟随源文件」（-b source）或取值无法解析。
+    """
+    text = value.strip().lower()
+    if not text or text == BITRATE_SOURCE:
+        return None
+    if text.endswith("k"):
+        text = text[:-1]
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def probe_bitrate(audio_path: str | Path, ffmpeg_path: str) -> int | None:
+    """读出音频自身的码率（kbps），读不出来返回 None。
+
+    ffmpeg 会把媒体信息打到 stderr，从中解析：
+    优先取音频流那一行自报的码率；FLAC 这类无损流通常不报，
+    就退回容器行上的整体码率。
+    """
+    try:
+        result = subprocess.run(
+            [ffmpeg_path, "-hide_banner", "-i", str(audio_path)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+        )
+    except OSError:
+        return None
+
+    info = result.stderr or ""
+    # 注意这两个正则里的 `.` 都不匹配换行，所以只会匹配到同一行内
+    stream = re.search(r"Audio:.*?(\d+)\s*kb/s", info)
+    if stream:
+        return int(stream.group(1))
+    container = re.search(r"Duration:.*?bitrate:\s*(\d+)\s*kb/s", info)
+    if container:
+        return int(container.group(1))
+    return None
+
+
+def effective_mp3_bitrate(requested: str, audio_path: str | Path, ffmpeg_path: str) -> str:
+    """算出这个文件实际该用的 MP3 码率，返回形如 '192k' 的字符串。
+
+    两条规则：
+
+    - `-b source`（跟随源文件）直接用源文件自身的码率；
+    - **无论选了哪个档位，都不会高过源文件**。从有损源往上转没有意义——
+      音质不会变好，文件只会变大。
+
+    最后夹在 MP3 能表达的范围内。
+    """
+    wanted = parse_kbps(requested)
+    source = probe_bitrate(audio_path, ffmpeg_path)
+
+    if wanted is None:
+        wanted = source if source else DEFAULT_KBPS
+
+    if source and wanted > source:
+        logging.info("%s 源文件只有 %dk，按 %dk 输出（不高于源）", Path(audio_path).name, source, source)
+        wanted = source
+
+    return f"{max(MIN_MP3_KBPS, min(wanted, MAX_MP3_KBPS))}k"
+
+
 def convert_to_mp3(audio_path: str, mp3_path: str, ffmpeg_path: str, bitrate: str) -> bool:
     """用 ffmpeg 把一个音频转成 MP3，成功返回 True。"""
     command = [ffmpeg_path, "-i", audio_path, "-b:a", bitrate, mp3_path, "-y"]
@@ -323,7 +400,8 @@ def process_audio_to_mp3(
             continue
 
         target = Path(mp3_dir) / (audio_file.stem + ".mp3")
-        if convert_to_mp3(str(audio_file), str(target), ffmpeg_path, bitrate):
+        kbps = effective_mp3_bitrate(bitrate, audio_file, ffmpeg_path)
+        if convert_to_mp3(str(audio_file), str(target), ffmpeg_path, kbps):
             converted += 1
             if not (keep_flac and not no_mp3):
                 force_remove(audio_file)
@@ -363,7 +441,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--flac-dir", help="FLAC 输出目录（仅在 --keep-flac 时有效）")
     parser.add_argument("--mp3-dir", help="MP3 输出目录（覆盖默认）")
     parser.add_argument(
-        "-b", "--bitrate", default=DEFAULT_BITRATE, help=f"MP3 比特率，例如 128k, 192k, 320k (默认: {DEFAULT_BITRATE})"
+        "-b",
+        "--bitrate",
+        default=DEFAULT_BITRATE,
+        help=f"MP3 比特率，例如 128k, 192k, 320k；给 {BITRATE_SOURCE} 表示跟随源文件。"
+        f"无论选哪个都不会超过源文件自身的码率 (默认: {DEFAULT_BITRATE})",
     )
     parser.add_argument("--keep-flac", action="store_true", help="保留解密后的 FLAC 文件（默认不保留）")
     parser.add_argument("--no-mp3", action="store_true", help="不生成 MP3，仅保留 FLAC（忽略 --keep-flac）")

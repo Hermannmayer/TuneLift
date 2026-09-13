@@ -63,6 +63,10 @@ SHADOW_REST = 5.0  # shadow-[5px_5px_0px_0px_#000]
 SHADOW_HOVER = 8.0  # hover 时阴影变大
 MOTION_MS = 150  # 规范要求 duration-150，干脆的波普玩具手感
 
+# 比特率下拉框里「跟随源文件」那一项的显示文字；传给后端时换成 BITRATE_SOURCE
+FOLLOW_SOURCE_LABEL = "跟随源文件"
+BITRATE_SOURCE = "source"
+
 # ---------------------------------------------------------------------------
 # 单一样式表。注意每个块都必须带选择器——Qt 遇到第一条没有选择器的声明会
 # 把整张表丢掉，而且是静默丢掉。
@@ -731,9 +735,13 @@ class TuneLiftWindow(QMainWindow):
         label_bitrate.setObjectName("label")
         self.bitrate_combo = QComboBox()
         self.bitrate_combo.setObjectName("combo")
-        self.bitrate_combo.addItems(["128k", "160k", "192k", "224k", "256k", "320k"])
+        self.bitrate_combo.addItems(["128k", "160k", "192k", "224k", "256k", "320k", FOLLOW_SOURCE_LABEL])
         self.bitrate_combo.setCurrentText("192k")
-        self.bitrate_combo.setToolTip("数值越高，MP3 音质越好，文件越大。\n推荐 192k（平衡）或 320k（高品质）。")
+        self.bitrate_combo.setToolTip(
+            "数值越高，MP3 音质越好，文件越大。推荐 192k（平衡）或 320k（高品质）。\n"
+            "选「跟随源文件」则使用源文件自身的码率。\n"
+            "无论选哪个，输出都不会高过源文件的码率。"
+        )
         row_mode.addWidget(self.independent_check)
         row_mode.addStretch()
         row_mode.addWidget(label_bitrate)
@@ -1023,6 +1031,8 @@ class TuneLiftWindow(QMainWindow):
         if not input_dir:
             input_dir = str(app_dir())
         bitrate = self.bitrate_combo.currentText()
+        if bitrate == FOLLOW_SOURCE_LABEL:
+            bitrate = BITRATE_SOURCE
         output_format = self.get_output_format()
 
         cmd = [*self._backend_prefix(), "-i", input_dir, "-b", bitrate]

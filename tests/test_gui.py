@@ -123,6 +123,15 @@ def test_bitrate_combo_feeds_command(window):
     assert cmd[cmd.index("-b") + 1] == "320k"
 
 
+def test_follow_source_option_maps_to_the_backend_token(window):
+    """下拉框里显示的是中文，传给后端的是 main.py 认识的 source。"""
+    window.bitrate_combo.setCurrentText(GUI.FOLLOW_SOURCE_LABEL)
+
+    cmd = window.build_command()
+    assert cmd[cmd.index("-b") + 1] == GUI.BITRATE_SOURCE
+    assert GUI.BITRATE_SOURCE == "source"
+
+
 def test_preview_mirrors_command(window):
     window.update_preview()
     assert window.preview.toPlainText() == " ".join(window.build_command())
