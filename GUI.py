@@ -20,6 +20,7 @@ from PySide6.QtCore import (
     QPoint,
     QPointF,
     QProcess,
+    QProcessEnvironment,
     QPropertyAnimation,
     Qt,
 )
@@ -1045,6 +1046,11 @@ class TuneLiftWindow(QMainWindow):
         # 源码模式下后端靠工作目录找 hook_qq_music.js 与 ffmpeg.exe，
         # 所以显式设成程序所在目录，不受界面是从哪里启动的影响。
         self.process.setWorkingDirectory(str(app_dir()))
+        # 后端的日志按 UTF-8 写出（冻结版会自己强制，源码版靠这个环境变量），
+        # 下面 read_output 也按 UTF-8 解码。两边必须一致，否则日志里的中文会变乱码。
+        environment = QProcessEnvironment.systemEnvironment()
+        environment.insert("PYTHONIOENCODING", "utf-8")
+        self.process.setProcessEnvironment(environment)
         self.process.setProcessChannelMode(QProcess.MergedChannels)
         self.process.readyReadStandardOutput.connect(self.read_output)
         self.process.finished.connect(self.process_finished)

@@ -78,11 +78,18 @@ _force_utf8_console()
 def resource_path(name: str) -> str:
     """返回随程序分发的资源（钩子脚本、ffmpeg）的绝对路径。
 
-    PyInstaller 冻结后资源在 sys._MEIPASS 下；直接跑源码时以当前工作目录为准。
+    锚点始终是**程序自己所在的目录**，不是当前工作目录——这样从任何地方
+    调用都找得到资源：
+
+    - 冻结后（PyInstaller）：资源在 sys._MEIPASS 下；
+    - 直接跑源码：资源在 main.py 同目录。
+
+    这里如果用 os.getcwd()，从别的目录调用就会找不到 ffmpeg 和钩子脚本，
+    而且报错信息会指向一个看起来毫不相关的位置。
     """
     if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, name)
-    return os.path.join(os.path.abspath("."), name)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
 
 
 def force_remove(path: str | Path, max_retries: int = 5, delay: float = 0.2) -> bool:

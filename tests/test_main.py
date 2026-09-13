@@ -18,9 +18,14 @@ import main
 # resource_path
 # --------------------------------------------------------------------------
 def test_resource_path_without_meipass(monkeypatch, tmp_path):
+    """源码模式下资源锚定在 main.py 所在目录，而不是当前工作目录。
+
+    锚在工作目录的话，从别的路径调用就会找不到 ffmpeg 与钩子脚本。
+    """
     monkeypatch.delattr(sys, "_MEIPASS", raising=False)
-    monkeypatch.chdir(tmp_path)
-    assert main.resource_path("hook.js") == os.path.join(os.path.abspath("."), "hook.js")
+    monkeypatch.chdir(tmp_path)  # 故意换到别的地方，结果不该受影响
+    expected = os.path.join(os.path.dirname(os.path.abspath(main.__file__)), "hook.js")
+    assert main.resource_path("hook.js") == expected
 
 
 def test_resource_path_with_meipass(monkeypatch, tmp_path):

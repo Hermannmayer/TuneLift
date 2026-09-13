@@ -134,6 +134,26 @@ def test_toggle_preview_visibility(window):
     assert window.toggle_preview_btn.text() == "▶ 显示命令预览"
 
 
+def test_backend_is_spawned_with_utf8_output(window, monkeypatch):
+    """后端按 UTF-8 写日志，界面按 UTF-8 读；两边必须一致，否则中文会变乱码。
+
+    冻结版后端会自己把 stdout 换成 UTF-8，源码版不会，所以必须由界面显式指定。
+    """
+    monkeypatch.setattr(GUI.QProcess, "start", lambda self, *a, **k: None)
+    window.start_conversion()
+
+    assert window.process is not None
+    assert window.process.processEnvironment().value("PYTHONIOENCODING") == "utf-8"
+
+
+def test_backend_runs_from_the_app_directory(window, monkeypatch):
+    """源码模式下后端靠工作目录找 hook_qq_music.js 与 ffmpeg.exe。"""
+    monkeypatch.setattr(GUI.QProcess, "start", lambda self, *a, **k: None)
+    window.start_conversion()
+
+    assert window.process.workingDirectory() == str(GUI.app_dir())
+
+
 def test_clear_log(window):
     window.log.append("一些日志")
     window.clear_log()
