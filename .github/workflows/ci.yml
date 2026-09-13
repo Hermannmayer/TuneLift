@@ -76,10 +76,7 @@ jobs:
             throw '打包结果缺少 FFmpeg 的 LGPLv3 全文'
           }
 
-      - name: 上传自检产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuneLift-win64-ci
-          path: dist/TuneLift
-          if-no-files-found: error
-          retention-days: 7
+      # 到此为止：构建产物只用于验证打包链路是通的，不保留、不下载。
+      # 本项目不发布编译好的二进制——需要的人请按 README 自行构建。
+      # 如果以后有人想加 upload-artifact 把成品挂出来，请先读 README 的
+      # 「使用范围与风险提示」。

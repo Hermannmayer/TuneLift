@@ -1,5 +1,8 @@
 name: Release
 
+# 推 v* 标签时：完整跑一遍 lint / 测试 / 打包 / 冒烟测试，然后建一个只有说明的
+# Release。刻意不发布编译产物——原因见下面「发布 Release」那一步的注释。
+
 on:
   push:
     tags: ['v*']
@@ -10,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: 构建 Windows 发行包
+    name: 校验可构建性并发布说明
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,21 +55,14 @@ jobs:
             throw '打包结果缺少 FFmpeg 的 LGPLv3 全文'
           }
 
-      - name: 压缩
-        shell: pwsh
-        run: Compress-Archive -Path dist\TuneLift -DestinationPath TuneLift-win64.zip
-
-      - name: 上传构建产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuneLift-win64
-          path: TuneLift-win64.zip
-          if-no-files-found: error
-
       - name: 发布 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: TuneLift-win64.zip
+          # 只发 release notes，源码压缩包由 GitHub 自动附带。
+          #
+          # 刻意不发布构建好的二进制：本项目的用途是转换用户自己合法购买的音频，
+          # 直接分发一个现成可运行的成品，等于把「规避技术措施的装置」递到任何人手上，
+          # 和只提供源码完全不是一个量级。需要的人请自行按 README 构建。
           generate_release_notes: true
           draft: false

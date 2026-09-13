@@ -13,20 +13,44 @@ REM ============================================================
 setlocal
 cd /d "%~dp0" || goto :err
 
-where uv >nul 2>nul
-if errorlevel 1 goto :nouv
+REM --- find a usable toolchain ----------------------------------
+REM  uv is preferred. If it is not on PATH, check its default install
+REM  location before giving up - a fresh "install uv" often needs a new
+REM  terminal before PATH picks it up.
+set "UV="
+where uv >nul 2>nul && set "UV=uv"
+if not defined UV if exist "%USERPROFILE%\.local\bin\uv.exe" set "UV=%USERPROFILE%\.local\bin\uv.exe"
+
+if not defined UV goto :nouv
 
 echo [build] using uv
-uv sync || goto :err
-set "RUNNER=uv run python"
+"%UV%" sync || goto :err
+set "RUNNER="%UV%" run python"
 goto :build
 
 :nouv
 set "PY=%~dp0.venv\Scripts\python.exe"
-if not exist "%PY%" set "PY=python"
+if exist "%PY%" goto :havepy
+where python >nul 2>nul || goto :nopy
+set "PY=python"
+
+:havepy
 echo [build] uv not found, falling back to %PY%
 "%PY%" -m pip install -r requirements.txt || goto :err
 set "RUNNER="%PY%""
+goto :build
+
+:nopy
+echo.
+echo [build] ERROR: no usable Python toolchain found.
+echo.
+echo   Building needs uv (recommended) or Python 3.12:
+echo     uv     - https://docs.astral.sh/uv/getting-started/installation/
+echo     Python - https://www.python.org/downloads/
+echo.
+echo   Install one of them, then run build.bat again.
+echo   Details are in the README under the build section.
+goto :err
 
 :build
 if not exist "ffmpeg.exe" (

@@ -3,7 +3,7 @@
 把 QQ音乐下载的加密音频（`.mflac` / `.mgg`）一键转换成通用的 FLAC / MP3。
 
 TuneLift 通过注入 QQ音乐客户端完成解密，再调用 ffmpeg 转码。提供图形界面和命令行两种用法，
-发行包内置 ffmpeg 与解密脚本，解压即用。
+自己构建出来的包内置 ffmpeg 与解密脚本，解压即用。
 
 ![界面截图](docs/screenshot.png)
 
@@ -193,9 +193,28 @@ uv run ruff check .
 
 测试全部离线，不需要 QQ音乐或 ffmpeg。
 
-### 打包
+### 自己构建
 
-打包交给 GitHub Actions：推一个 `v*` 标签就会自动构建并发 Release。
+本项目**不发布编译好的成品**——原因见上面的「使用范围与风险提示」。需要的话请自行构建：
+
+```bat
+build.bat
+```
+
+一条命令搞定：自动同步依赖、缺 `ffmpeg.exe` 时自动下载、打包、并把许可证与第三方声明一并归位。
+产物在 `dist\TuneLift\`，整个目录可以直接拷走使用。
+
+构建需要 **uv**（推荐）或 Python 3.12：
+
+- uv：<https://docs.astral.sh/uv/getting-started/installation/>
+- Python：<https://www.python.org/downloads/>
+
+两个都没装时 `build.bat` 会直接告诉你去哪装。`ffmpeg.exe` 体积较大，不进版本库。
+
+### 发布
+
+推一个 `v*` 标签会在 GitHub Actions 上完整跑一遍 lint、测试、打包和冒烟测试，
+然后建一个**只有发布说明的 Release**——不附带任何编译产物：
 
 ```bash
 git tag v1.0.0
@@ -205,16 +224,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-也可以在 Actions 页面手动触发，那种情况下只上传构建产物、不发 Release。
-
-本地验证打包：
-
-```bat
-build.bat
-```
-
-脚本会自己 `uv sync`，缺 `ffmpeg.exe` 时自动调用 `scripts/fetch_ffmpeg.ps1` 下载。
-`ffmpeg.exe` 体积较大，不进版本库。
+CI 每次 push 也会做同样的构建自检，用来确认打包链路没坏。
 
 ## 许可
 
