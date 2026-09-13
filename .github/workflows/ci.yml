@@ -68,6 +68,18 @@ jobs:
           }
           if (-not (Test-Path 'dist\TuneLift\_internal')) { throw '打包结果缺少 _internal' }
 
+          # ffmpeg 和钩子脚本是运行时的必需品，由 --add-binary / --add-data 打进
+          # _internal —— resource_path() 就是按 _MEIPASS（即 _internal）去找它们的。
+          # 下载环节没跑通、或 PyInstaller 漏收，都必须在这里炸出来。
+          foreach ($name in 'ffmpeg.exe', 'hook_qq_music.js') {
+            $p = "dist\TuneLift\_internal\$name"
+            if (-not (Test-Path $p)) {
+              $found = Get-ChildItem 'dist\TuneLift' -Recurse -Filter $name -ErrorAction SilentlyContinue
+              $where = if ($found) { ($found.FullName -join ', ') } else { '整个包内都没有' }
+              throw "打包结果缺少 _internal\$name（实际位置：$where）"
+            }
+          }
+
           # 许可文件必须随包分发（Qt 与 FFmpeg 都是 LGPLv3）
           foreach ($name in 'LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES.md') {
             if (-not (Test-Path "dist\TuneLift\$name")) { throw "打包结果缺少 $name" }
