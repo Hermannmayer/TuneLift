@@ -1,15 +1,15 @@
-"""TuneLift 后端：把 QQ音乐的加密音频解密出来，并按需转成 MP3。
+"""TuneLift 后端：把音乐的加密音频解密出来，并按需转成 MP3。
 
 三段式流程：
 
     扫描  →  解密  →  转码
     ────     ────     ────
     递归找出输入目录里的 .mflac / .mgg；
-    注入 QQ音乐客户端，借它的解密能力把文件还原成 FLAC / OGG；
+    注入音乐客户端，借它的解密能力把文件还原成 FLAC / OGG；
     再调用 ffmpeg 把音频转成 MP3。
 
 解密这一步依赖 QQMusic.exe 正在运行——程序会把一段钩子脚本注入进去，调用它自己
-读取加密媒体的那套逻辑。所以运行前必须先把 QQ音乐客户端打开并登录。
+读取加密媒体的那套逻辑。所以运行前必须先把音乐客户端（QQ音乐）打开并登录。
 
 命令行用法见 `python main.py --help`；退出码含义见 `EXIT_*` 常量。
 """
@@ -56,7 +56,7 @@ DEFAULT_KBPS = 192
 class TuneLiftError(RuntimeError):
     """前置条件不满足，当前根本没法开工。
 
-    输入目录、输出目录、QQ音乐进程、钩子脚本这四类问题都归到这里。它们和
+    输入目录、输出目录、音乐客户端进程、钩子脚本这四类问题都归到这里。它们和
     「某个文件解密失败」性质不同：前者重试也没用，应当直接退出；后者逐文件跳过即可。
     """
 
@@ -129,7 +129,7 @@ def _log_script_error(message: dict, data: bytes | None) -> None:
 def _activate_hook(session: Session) -> Script:
     """在会话里加载钩子脚本，并确认它真的可用。
 
-    脚本要调用的 DLL（QQMusicCommon.dll）是 QQ音乐按需加载的，所以「客户端开着
+    脚本要调用的 DLL（QQMusicCommon.dll）是客户端按需加载的，所以「客户端开着
     但还没播放过任何歌」时脚本会初始化失败。这种失败必须当场认出来，否则后面
     每个文件都会报一句莫名其妙的 "unable to find method 'decrypt'"。
     """
@@ -156,9 +156,9 @@ def _activate_hook(session: Session) -> Script:
 
 @contextmanager
 def _decryptor() -> Iterator[Script]:
-    """连上 QQ音乐并装好钩子；无论怎么退出都会断开连接。
+    """连上音乐客户端并装好钩子；无论怎么退出都会断开连接。
 
-    attach 之后如果中途抛异常而不 detach，会把附着状态留在 QQ音乐进程里。
+    attach 之后如果中途抛异常而不 detach，会把附着状态留在客户端进程里。
     用上下文管理器把这件事集中在一处，调用方就不用逐个出口去写了。
     """
     try:

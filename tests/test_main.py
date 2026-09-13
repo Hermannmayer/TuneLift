@@ -1,6 +1,6 @@
 """main.py 的单元测试。
 
-全部离线运行：不需要 QQ音乐进程，也不需要真的调用 ffmpeg。
+全部离线运行：不需要音乐客户端进程，也不需要真的调用 ffmpeg。
 真实解密链路由 tools/ 下的端到端脚本覆盖，这里只锁行为契约。
 """
 
@@ -292,7 +292,7 @@ def test_main_maps_precondition_failure_to_bad_usage(monkeypatch, tmp_path):
     _stub_ffmpeg(monkeypatch, tmp_path)
 
     def _boom(*_a, **_k):
-        raise main.TuneLiftError("QQ音乐没开")
+        raise main.TuneLiftError("音乐客户端没开")
 
     monkeypatch.setattr(main, "run_decrypt", _boom)
     assert main.main(["-i", str(src), "-o", str(tmp_path / "out")]) == main.EXIT_BAD_USAGE

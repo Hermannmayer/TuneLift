@@ -676,7 +676,7 @@ class TuneLiftWindow(QMainWindow):
         font.setLetterSpacing(QFont.AbsoluteSpacing, -1.0)  # QSS 不支持 letter-spacing
         title.setFont(font)
 
-        subtitle = QLabel("把 QQ音乐的加密音频解出来，转成通用的 FLAC / MP3")
+        subtitle = QLabel("把音乐的加密音频解出来，转成通用的 FLAC / MP3")
         subtitle.setObjectName("subtitle")
 
         layout.addWidget(title)
@@ -847,7 +847,7 @@ class TuneLiftWindow(QMainWindow):
         layout.setContentsMargins(18, 14, 16, 16)
         label = QLabel(
             "使用提示：\n"
-            "• 转换前请确保 QQ音乐客户端已在后台运行（否则会提示无法连接）。\n"
+            "• 转换前请确保音乐客户端（QQ音乐）已在后台运行（否则会提示无法连接）。\n"
             "• 建议输入/输出路径使用纯英文，避免中文字符，以免解密失败。\n"
             "• 若遇到「No such file or directory」错误，请检查路径中是否包含空格或特殊字符。\n"
             "• 选择「仅 FLAC」时，部分 OGG 文件会强制转 MP3 并删除 OGG 源文件。"
@@ -996,7 +996,7 @@ class TuneLiftWindow(QMainWindow):
             self,
             "选择歌曲",
             self.input_edit.text(),
-            "QQ音乐加密音频 (*.mflac *.mgg);;所有文件 (*)",
+            "加密音频 (*.mflac *.mgg);;所有文件 (*)",
         )
         if path:
             self.input_edit.setText(path)
