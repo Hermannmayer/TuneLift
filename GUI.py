@@ -622,11 +622,13 @@ class TuneLiftWindow(QMainWindow):
 
         self.setWindowIcon(QIcon(str(app_dir() / "tunelift.ico")))
 
-        if not self.exe_path.exists():
+        # 只有既没有打包好的 main.exe、也没有 main.py 时才需要提醒。
+        # 从源码跑时退回 main.py 是正常情况，不该弹框吓人。
+        if not Path(self._backend_prefix()[0]).is_file():
             QMessageBox.warning(
                 self,
                 "提示",
-                f"未找到 main.exe（后端程序），请确保它与本程序在同一目录。\n当前目录：{app_dir()}",
+                f"未找到后端程序（main.exe 或 main.py）。\n当前目录：{app_dir()}",
             )
 
     # -- 界面搭建 ----------------------------------------------------------
@@ -976,16 +978,29 @@ class TuneLiftWindow(QMainWindow):
             return "flac"
         return "both"
 
+    def _backend_prefix(self) -> list[str]:
+        """后端程序的命令行前缀。
+
+        打包好的发行版里是同目录的 main.exe。直接跑源码时它还不存在
+        （那是 build.bat 的产物），这时退回到用当前解释器执行同目录的
+        main.py —— 开发者不必先打包也能把界面跑起来。
+        """
+        if self.exe_path.exists():
+            return [str(self.exe_path)]
+        script = app_dir() / "main.py"
+        if script.exists():
+            return [sys.executable, str(script)]
+        return [str(self.exe_path)]  # 两个都没有，交给 start_conversion 报错
+
     def build_command(self) -> list[str]:
         """按当前界面设置拼出后端命令行参数。"""
-        exe = str(self.exe_path)
         input_dir = self.input_edit.text().strip()
         if not input_dir:
             input_dir = str(app_dir())
         bitrate = self.bitrate_combo.currentText()
         output_format = self.get_output_format()
 
-        cmd = [exe, "-i", input_dir, "-b", bitrate]
+        cmd = [*self._backend_prefix(), "-i", input_dir, "-b", bitrate]
         if self.independent_check.isChecked():
             mp3_dir = self.mp3_edit.text().strip()
             flac_dir = self.flac_edit.text().strip()
@@ -1016,16 +1031,20 @@ class TuneLiftWindow(QMainWindow):
 
     def start_conversion(self) -> None:
         """启动后端进程，并把它 stdout/stderr 接到日志窗口。"""
-        if not self.exe_path.exists():
-            QMessageBox.warning(self, "错误", "未找到 main.exe，请确保它位于程序目录。")
-            return
         if self.running:
             return
 
         cmd = self.build_command()
+        if not Path(cmd[0]).is_file():
+            QMessageBox.warning(self, "错误", "未找到后端程序 main.exe，请先运行 build.bat 生成。")
+            return
+
         self.process = QProcess(self)
         self.process.setProgram(cmd[0])
         self.process.setArguments(cmd[1:])
+        # 源码模式下后端靠工作目录找 hook_qq_music.js 与 ffmpeg.exe，
+        # 所以显式设成程序所在目录，不受界面是从哪里启动的影响。
+        self.process.setWorkingDirectory(str(app_dir()))
         self.process.setProcessChannelMode(QProcess.MergedChannels)
         self.process.readyReadStandardOutput.connect(self.read_output)
         self.process.finished.connect(self.process_finished)

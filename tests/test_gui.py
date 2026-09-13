@@ -5,6 +5,7 @@
 """
 
 import os
+import sys
 
 import pytest
 
@@ -53,10 +54,24 @@ def test_radio_buttons_drive_output_format(window):
     assert window.get_output_format() == "both"
 
 
-def test_build_command_starts_with_backend(window):
+def test_build_command_uses_bundled_backend_when_present(window, tmp_path):
+    """发行版里后端是同目录的 main.exe。"""
+    fake_exe = tmp_path / "main.exe"
+    fake_exe.write_bytes(b"")
+    window.exe_path = fake_exe
+
     cmd = window.build_command()
-    assert cmd[0] == str(window.exe_path)
+    assert cmd[0] == str(fake_exe)
     assert "-i" in cmd and "-b" in cmd
+
+
+def test_build_command_falls_back_to_main_py(window):
+    """从源码跑时没有 main.exe，应当退回用当前解释器执行 main.py。"""
+    window.exe_path = GUI.app_dir() / "这个后端不存在.exe"
+
+    cmd = window.build_command()
+    assert cmd[0] == sys.executable
+    assert cmd[1].endswith("main.py")
 
 
 def test_build_command_root_mode_uses_output_flag(window):
