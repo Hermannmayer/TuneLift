@@ -1,0 +1,25 @@
+# uv / Python
+.venv/
+__pycache__/
+*.pyc
+
+# 工具缓存
+.pytest_cache/
+.ruff_cache/
+
+# 编辑器 / 本地配置
+.claude/
+.idea/
+.vscode/
+
+# PyInstaller 构建产物
+build/
+dist/
+*.spec
+
+# 运行时资源（体积大，按 README 自行放置）
+ffmpeg.exe
+main.exe
+
+# 默认输出目录
+output/

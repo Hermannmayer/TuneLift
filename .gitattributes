@@ -1,0 +1,22 @@
+# 统一换行符，避免在不同机器上 checkout 出问题。
+# .bat / .ps1 必须是 CRLF —— cmd 解析 LF 换行的批处理会吞掉行首字符。
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+*.py    text eol=lf
+*.js    text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+uv.lock text eol=lf
+
+# 无扩展名的文本文件
+LICENSE text eol=lf
+NOTICE  text eol=lf
+
+*.ico   binary
+*.png   binary
+*.exe   binary

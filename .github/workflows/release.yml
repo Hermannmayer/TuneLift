@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 Windows 发行包
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Ruff lint
+        run: uv run --frozen ruff check .
+
+      - name: pytest
+        run: uv run --frozen pytest
+
+      - name: 准备 ffmpeg.exe
+        shell: pwsh
+        run: ./scripts/fetch_ffmpeg.ps1
+
+      - name: 打包
+        run: ./build.bat
+
+      - name: 冒烟测试
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          & .\dist\TuneLift\main.exe --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "main.exe --help 退出码 $LASTEXITCODE" }
+
+          foreach ($name in 'TuneLift.exe', 'main.exe', 'tunelift.ico', '_internal') {
+            if (-not (Test-Path "dist\TuneLift\$name")) { throw "打包结果缺少 $name" }
+          }
+
+      - name: 压缩
+        shell: pwsh
+        run: Compress-Archive -Path dist\TuneLift -DestinationPath TuneLift-win64.zip
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: TuneLift-win64
+          path: TuneLift-win64.zip
+          if-no-files-found: error
+
+      - name: 发布 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: TuneLift-win64.zip
+          generate_release_notes: true
+          draft: false

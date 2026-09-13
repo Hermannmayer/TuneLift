@@ -1,0 +1,36 @@
+[project]
+name = "tunelift"
+version = "0.1.0"
+description = "解密 QQ音乐 mflac/mgg 加密音频并转码为 MP3"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # 必须是 16.x：hook_qq_music.js 用的 Module.findExportByName 在 frida 17 已被移除
+    "frida==16.7.10",
+    "PySide6==6.11.1",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.0",  # build.bat 用它打包
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# 明暗两套样式表是超长单行字符串，换行反而没法维护
+"GUI.py" = ["E501"]
