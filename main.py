@@ -165,12 +165,35 @@ def _decryptor() -> Iterator[Script]:
         session.detach()
 
 
-def collect_sources(root: str) -> list[Path]:
-    """递归收集 root 下所有待解密的文件，按路径排序。"""
+def resolve_input(raw: str) -> Path:
+    """解析 -i 的取值并确认它确实能用。
+
+    两种都支持：一个目录（递归处理里面的加密音频），或**单个加密音频文件**。
+    只想转一首歌时，直接把文件路径丢给 -i 就行，不必先给它建个目录。
+    """
+    path = Path(raw).expanduser()
+    if path.is_dir():
+        return path
+    if path.is_file():
+        if path.suffix.lower() in SOURCE_SUFFIXES:
+            return path
+        raise TuneLiftError(f"不是支持的加密音频: {path.name}（只支持 {' / '.join(SOURCE_SUFFIXES)}）")
+    raise TuneLiftError(f"输入路径不存在: {path}")
+
+
+def collect_sources(root: str | Path) -> list[Path]:
+    """收集待解密的文件，按路径排序。
+
+    root 是目录就递归找，是单个文件就用它本身——两种情况下游处理完全一样。
+    """
+    root = Path(root)
+    if root.is_file():
+        return [root]
+
     found: list[Path] = []
     for directory, _sub_dirs, filenames in os.walk(root):
         for filename in filenames:
-            if os.path.splitext(filename)[1] in SOURCE_SUFFIXES:
+            if os.path.splitext(filename)[1].lower() in SOURCE_SUFFIXES:
                 found.append(Path(directory) / filename)
     return sorted(found)
 
@@ -181,7 +204,7 @@ def _decrypt_one(script: Script, source: Path, target: Path) -> None:
     解密库只认本地路径，所以先把源文件复制到临时目录，让它把结果写到另一个
     临时文件，成功后再挪到最终位置。两个临时文件都要清理掉。
     """
-    restored_suffix = RESTORED_SUFFIX[source.suffix]
+    restored_suffix = RESTORED_SUFFIX[source.suffix.lower()]
     source_copy = tempfile.NamedTemporaryFile(suffix=source.suffix, delete=False).name
     result_copy = tempfile.NamedTemporaryFile(suffix=restored_suffix, delete=False).name
 
@@ -194,35 +217,36 @@ def _decrypt_one(script: Script, source: Path, target: Path) -> None:
         force_remove(result_copy)
 
 
-def run_decrypt(input_dir: str, flac_output_dir: str) -> tuple[int, int, int]:
-    """把 input_dir（含子目录）里的加密音频全部解密到 flac_output_dir。
+def run_decrypt(input_path: str, flac_output_dir: str) -> tuple[int, int, int]:
+    """把 input_path 里的加密音频全部解密到 flac_output_dir。
+
+    input_path 可以是目录（递归处理），也可以是单个加密音频文件。
 
     返回 (本次解密数, 失败数, 已存在跳过数)。单个文件失败只跳过它，不影响其余；
     前置条件不满足则抛 TuneLiftError。
     """
-    if not os.path.isdir(input_dir):
-        raise TuneLiftError(f"输入目录不存在: {input_dir}")
+    source_root = resolve_input(input_path)
 
-    input_dir = os.path.abspath(input_dir)
+    # 先看有没有活干，再决定要不要动文件系统。
+    # 顺序反过来的话，对着一个没有加密文件的目录跑一次，就会凭空建出输出目录。
+    sources = collect_sources(source_root)
+    if not sources:
+        logging.info("没有找到 %s 文件，什么都不用做", " 或 ".join(SOURCE_SUFFIXES))
+        return 0, 0, 0
+
     flac_output_dir = os.path.abspath(flac_output_dir)
-
     try:
         os.makedirs(flac_output_dir, exist_ok=True)
     except OSError as exc:
         logging.error("无法创建输出目录 %s: %s", flac_output_dir, exc)
         raise TuneLiftError(f"输出目录不可用: {flac_output_dir}") from exc
 
-    sources = collect_sources(input_dir)
-    if not sources:
-        logging.info("没有找到 %s 文件", " 或 ".join(SOURCE_SUFFIXES))
-        return 0, 0, 0
-
     logging.info("找到 %d 个文件，开始解密...", len(sources))
     decrypted = failed = reused = 0
 
     with _decryptor() as script:
         for index, source in enumerate(sources, 1):
-            target = Path(flac_output_dir) / (source.stem + RESTORED_SUFFIX[source.suffix])
+            target = Path(flac_output_dir) / (source.stem + RESTORED_SUFFIX[source.suffix.lower()])
             if target.exists():
                 # 上一次已经解出来了，直接复用——这样换了输出格式重跑不必从头再来
                 reused += 1
@@ -327,7 +351,9 @@ def build_output_dirs(args: argparse.Namespace) -> tuple[str, str]:
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="解密 QQ音乐 mflac 文件并转换为 MP3")
-    parser.add_argument("-i", "--input", help="输入目录（包含 .mflac 文件），默认为当前目录")
+    parser.add_argument(
+        "-i", "--input", help="输入目录（递归处理其中的 .mflac / .mgg），或单个加密音频文件；默认为当前目录"
+    )
     parser.add_argument(
         "-o",
         "--output",
@@ -349,13 +375,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     args = _parse_args(argv)
 
-    input_dir = os.path.abspath(args.input) if args.input else os.getcwd()
-    if not os.path.isdir(input_dir):
-        logging.error("输入目录不存在: %s", input_dir)
+    try:
+        input_path = resolve_input(args.input if args.input else os.getcwd())
+    except TuneLiftError as exc:
+        logging.error("%s", exc)
         return EXIT_BAD_USAGE
 
     flac_output_dir, mp3_output_dir = build_output_dirs(args)
-    logging.info("输入目录: %s", input_dir)
+    logging.info("输入: %s", os.path.abspath(input_path))
     logging.info("FLAC 输出: %s", flac_output_dir)
     logging.info("MP3 输出: %s", mp3_output_dir)
 
@@ -365,7 +392,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_BAD_USAGE
 
     try:
-        decrypted, decrypt_failed, reused = run_decrypt(input_dir, flac_output_dir)
+        decrypted, decrypt_failed, reused = run_decrypt(str(input_path), flac_output_dir)
     except TuneLiftError:
         return EXIT_BAD_USAGE
 

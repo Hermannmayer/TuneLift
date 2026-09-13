@@ -318,3 +318,85 @@ def test_reused_files_still_trigger_transcode(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "process_audio_to_mp3", _spy)
     assert main.main(["-i", str(src), "-o", str(tmp_path / "out")]) == main.EXIT_OK
     assert called, "已存在跳过的文件也必须触发转码"
+
+
+# --------------------------------------------------------------------------
+# 输入既可以是目录，也可以是单个歌曲文件
+# --------------------------------------------------------------------------
+def test_resolve_input_accepts_a_directory(tmp_path):
+    src = tmp_path / "in"
+    src.mkdir()
+    assert main.resolve_input(str(src)) == src
+
+
+def test_resolve_input_accepts_a_single_song(tmp_path):
+    song = tmp_path / "a.mflac"
+    song.write_bytes(b"x")
+    assert main.resolve_input(str(song)) == song
+
+
+def test_resolve_input_rejects_other_file_types(tmp_path):
+    other = tmp_path / "a.mp3"
+    other.write_bytes(b"x")
+    with pytest.raises(main.TuneLiftError):
+        main.resolve_input(str(other))
+
+
+def test_resolve_input_rejects_missing_path(tmp_path):
+    with pytest.raises(main.TuneLiftError):
+        main.resolve_input(str(tmp_path / "nope"))
+
+
+def test_collect_sources_walks_a_directory(tmp_path):
+    src = tmp_path / "in"
+    (src / "sub").mkdir(parents=True)
+    (src / "a.mflac").write_bytes(b"x")
+    (src / "sub" / "b.mgg").write_bytes(b"x")
+    (src / "c.mp3").write_bytes(b"x")  # 不是加密格式，不该被收进来
+
+    assert sorted(p.name for p in main.collect_sources(src)) == ["a.mflac", "b.mgg"]
+
+
+def test_collect_sources_accepts_a_single_file(tmp_path):
+    song = tmp_path / "a.mflac"
+    song.write_bytes(b"x")
+    assert main.collect_sources(song) == [song]
+
+
+def test_main_accepts_a_single_song(monkeypatch, tmp_path):
+    """-i 直接给一个 .mflac 文件也要能跑，不必先给它建目录。"""
+    song = tmp_path / "a.mflac"
+    song.write_bytes(b"x")
+    _stub_ffmpeg(monkeypatch, tmp_path)
+
+    seen = {}
+
+    def _spy(path, _out):
+        seen["path"] = path
+        return 1, 0, 0
+
+    monkeypatch.setattr(main, "run_decrypt", _spy)
+    monkeypatch.setattr(main, "process_audio_to_mp3", lambda *a, **k: (0, 0))
+
+    assert main.main(["-i", str(song), "-o", str(tmp_path / "out")]) == main.EXIT_OK
+    assert seen["path"] == str(song)
+
+
+def test_main_rejects_a_non_encrypted_file(monkeypatch, tmp_path):
+    other = tmp_path / "a.mp3"
+    other.write_bytes(b"x")
+    _stub_ffmpeg(monkeypatch, tmp_path)
+    assert main.main(["-i", str(other)]) == main.EXIT_BAD_USAGE
+
+
+def test_run_decrypt_leaves_everything_alone_when_nothing_encrypted(tmp_path):
+    """目录里没有加密文件时，连输出目录都不该建，输入目录也一个字不动。"""
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "song.mp3").write_bytes(b"x")
+    (src / "notes.txt").write_text("x", encoding="utf-8")
+    out = tmp_path / "out"
+
+    assert main.run_decrypt(str(src), str(out)) == (0, 0, 0)
+    assert not out.exists(), "没有加密文件时不该创建输出目录"
+    assert sorted(p.name for p in src.iterdir()) == ["notes.txt", "song.mp3"]

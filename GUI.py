@@ -700,19 +700,25 @@ class TuneLiftWindow(QMainWindow):
         # 输入目录
         row_input = QHBoxLayout()
         row_input.setSpacing(10)
-        label_input = QLabel("输入目录")
+        label_input = QLabel("输入")
         label_input.setObjectName("label")
         self.input_edit = QLineEdit()
         self.input_edit.setObjectName("inputField")
         self.input_edit.setToolTip(
-            "包含 .mflac 或 .mgg 文件的文件夹。建议使用英文路径，避免中文、日文等特殊字符，以防解密失败。"
+            "包含 .mflac / .mgg 的文件夹（会递归处理），也可以直接填单个加密音频文件。\n"
+            "建议使用英文路径，避免中文、日文等特殊字符，以防解密失败。"
         )
         browse_input = MemphisButton("浏览")
         browse_input.setObjectName("browseBtn")
         self._browse_input = browse_input
+        pick_file = MemphisButton("选文件")
+        pick_file.setObjectName("browseBtn")
+        pick_file.setToolTip("只转某一首歌时用这个，直接挑一个 .mflac / .mgg 文件。")
+        self._pick_input_file = pick_file
         row_input.addWidget(label_input)
         row_input.addWidget(self.input_edit, 1)
         row_input.addWidget(browse_input)
+        row_input.addWidget(pick_file)
         layout.addLayout(row_input)
 
         # 输出模式 + 比特率
@@ -947,6 +953,8 @@ class TuneLiftWindow(QMainWindow):
         self._browse_root.clicked.connect(lambda: self.browse_folder(self.root_edit))
         self._browse_mp3.clicked.connect(lambda: self.browse_folder(self.mp3_edit))
         self._browse_flac.clicked.connect(lambda: self.browse_folder(self.flac_edit))
+        # 「选文件」走单曲路径，选完直接填进输入框
+        self._pick_input_file.clicked.connect(self.browse_file)
 
     # -- 行为 --------------------------------------------------------------
     def toggle_output_mode(self) -> None:
@@ -970,6 +978,22 @@ class TuneLiftWindow(QMainWindow):
             line_edit.setText(dir_path)
             if line_edit is self.input_edit:
                 self.root_edit.setText(str(Path(dir_path) / "output"))
+
+    def browse_file(self) -> None:
+        """挑单个加密音频文件填进输入框——只想转一首歌时用这个。
+
+        后端本来就支持把文件当输入，这里只是给个入口，省得手打路径。
+        """
+        path, _selected = QFileDialog.getOpenFileName(
+            self,
+            "选择歌曲",
+            self.input_edit.text(),
+            "QQ音乐加密音频 (*.mflac *.mgg);;所有文件 (*)",
+        )
+        if path:
+            self.input_edit.setText(path)
+            # 和选目录时一样，把输出根目录跟着调到它旁边，用户直接就能开始
+            self.root_edit.setText(str(Path(path).parent / "output"))
 
     def get_output_format(self) -> str:
         """按单选框返回 'mp3' / 'flac' / 'both'。"""

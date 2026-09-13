@@ -74,6 +74,16 @@ def test_build_command_falls_back_to_main_py(window):
     assert cmd[1].endswith("main.py")
 
 
+def test_input_field_accepts_a_single_song(window, tmp_path):
+    """输入框里直接填一个歌曲文件路径，也要能拼出正确的命令行。"""
+    song = tmp_path / "a.mflac"
+    song.write_bytes(b"x")
+    window.input_edit.setText(str(song))
+
+    cmd = window.build_command()
+    assert cmd[cmd.index("-i") + 1] == str(song)
+
+
 def test_build_command_root_mode_uses_output_flag(window):
     cmd = window.build_command()
     assert "-o" in cmd
