@@ -189,6 +189,13 @@ def test_initial_dirs_point_under_app_dir(window):
     assert window.flac_edit.text() == str(GUI.app_dir() / "output" / "flac")
 
 
+def test_window_icon_loads(window):
+    """图标文件缺失或格式坏了不该悄悄过去，得多尺寸可用才算数。"""
+    icon = window.windowIcon()
+    assert not icon.isNull(), "窗口图标没加载上"
+    assert len(icon.availableSizes()) > 1, "ico 里应当包含多个尺寸，供不同 DPI 取用"
+
+
 # --------------------------------------------------------------------------
 # Memphis 视觉机制：只测行为，不测像素
 # --------------------------------------------------------------------------
