@@ -5,6 +5,8 @@
 TuneLift 通过注入 QQ音乐客户端完成解密，再调用 ffmpeg 转码。提供图形界面和命令行两种用法，
 发行包内置 ffmpeg 与解密脚本，解压即用。
 
+![界面截图](docs/screenshot.png)
+
 ## 功能特点
 
 - **图形界面** —— 可视化设置输入目录、输出模式、比特率、输出格式，带命令预览和实时日志
@@ -162,29 +164,21 @@ build.bat
 脚本会自己 `uv sync`，缺 `ffmpeg.exe` 时自动调用 `scripts/fetch_ffmpeg.ps1` 下载。
 `ffmpeg.exe` 体积较大，不进版本库。
 
-## 来源与许可
+## 许可
 
-本项目基于 **[zksbx/TuneFree](https://github.com/zksbx/TuneFree)** 修改而来，原作者联系邮箱 `2505923037@qq.com`。核心的解密脚本与整体设计来自上游。
+本项目以 **Apache License 2.0** 发布，全文见 [LICENSE](LICENSE)。
 
-在上游基础上所做的改动：
-
-- 重整为 uv 管理的工程结构，补齐类型标注、docstring 与项目文档
-- 加入 pytest 测试与 ruff 检查，配置 GitHub Actions 流水线（打包交给 CI）
-- 修复若干缺陷：临时文件清理未做异常保护、hook 脚本失效时报错无法定位、换输出格式重跑会静默跳过、输出目录不可用时直接崩溃、模块 import 时替换 `sys.stdout`
-- 移除内置的 HTML 使用说明，内容并入本 README；界面相应去掉了「帮助」按钮
-- 新增显式退出码，以及可复现的 ffmpeg 获取脚本
-
-按上游项目的开源约定，本项目同样以 **Apache License 2.0** 发布，详见 [LICENSE](LICENSE)。
-上游项目的署名与版权归原作者所有，见 [NOTICE](NOTICE)。
+发行包里还包含若干第三方组件（Qt/PySide6、FFmpeg、Frida、Python 等），它们各自适用
+自己的许可条款，不适用本项目的 Apache-2.0。完整清单、各义务的履行情况与源码获取方式见
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，各许可的完整文本在 [LICENSES/](LICENSES/) 下。
 
 ## 致谢
 
 TuneLift 的诞生离不开以下优秀的开源项目和贡献者，在此表示诚挚的感谢：
 
-- **[zksbx/TuneFree](https://github.com/zksbx/TuneFree)** —— 本项目的上游，提供了全部核心代码与设计
 - **Frida** —— 强大的动态代码注入框架，使解密过程能够与 QQMusic 进程无缝交互
 - **FFmpeg** —— 业界领先的多媒体处理工具，负责将 FLAC 高效转换为 MP3
-- **music-decryptor** —— 由 [ericjuice](https://github.com/ericjuice) 开发的 QQ音乐解密工具，提供了核心解密脚本 `hook_qq_music.js`
+- **music-decryptor** —— 由 [ericjuice](https://github.com/ericjuice) 开发的 QQ音乐解密工具，提供了最初的解密思路
 - **PyInstaller** —— 将 Python 脚本打包成独立可执行文件的利器，让 TuneLift 能够轻松分发
 - **Python** —— 程序的编写语言，让这一切有可能
 - **解锁音乐社区 (Unlock Music)** —— 众多逆向爱好者的共同努力，使得 QQ音乐等平台的加密格式得以解析

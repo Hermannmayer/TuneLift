@@ -1,82 +1,107 @@
-const TARGET_DLL = "QQMusicCommon.dll";
+// TuneLift 解密钩子
+//
+// 作用：把 QQ音乐的加密音频（.mflac / .mgg）还原成普通的 FLAC / OGG。
+//
+// 原理：QQMusicCommon.dll 导出了一个 EncAndDesMediaFile 类，QQ音乐自己就是靠它
+// 读取加密媒体的。我们不插手播放流程，而是直接把这个对象构造出来、让它打开目标
+// 文件，然后把解密后的字节读出来写到指定路径。整个过程在 QQ音乐进程内完成，
+// 所以必须先启动客户端。
+//
+// 下面这些修饰名全部来自该 DLL 的**导出表**（可用 frida 的
+// Module.enumerateExports 自行核对），是二进制的接口事实；脚本的结构、命名、
+// 错误处理与清理逻辑由本项目自行实现。
 
-var EncAndDesMediaFileConstructorAddr = Module.findExportByName(
-  TARGET_DLL,
-  "??0EncAndDesMediaFile@@QAE@XZ"
-);
+'use strict';
 
-var EncAndDesMediaFileDestructorAddr = Module.findExportByName(
-  TARGET_DLL,
-  "??1EncAndDesMediaFile@@QAE@XZ"
-);
+var TARGET_DLL = 'QQMusicCommon.dll';
 
-var EncAndDesMediaFileOpenAddr = Module.findExportByName(
-  TARGET_DLL,
-  "?Open@EncAndDesMediaFile@@QAE_NPB_W_N1@Z"
-);
+// MSVC 的 thiscall 修饰名。逐个写全，方便对照导出表核查。
+var SYMBOLS = {
+  construct: '??0EncAndDesMediaFile@@QAE@XZ',
+  destruct: '??1EncAndDesMediaFile@@QAE@XZ',
+  open: '?Open@EncAndDesMediaFile@@QAE_NPB_W_N1@Z',
+  close: '?Close@EncAndDesMediaFile@@QAEXXZ',
+  isOpen: '?IsOpen@EncAndDesMediaFile@@QAE_NXZ',
+  size: '?GetSize@EncAndDesMediaFile@@QAEKXZ',
+  read: '?Read@EncAndDesMediaFile@@QAEKPAEK_J@Z',
+};
 
-var EncAndDesMediaFileGetSizeAddr = Module.findExportByName(
-  TARGET_DLL,
-  "?GetSize@EncAndDesMediaFile@@QAEKXZ"
-);
+// 对象实例需要多少字节由 DLL 自己决定，我们没法从导出表得知。
+// 这里给足余量——分配少了会静默踩坏堆内存，多分配几十字节没有代价。
+var INSTANCE_SIZE = 0x100; // 256 字节
 
-var EncAndDesMediaFileReadAddr = Module.findExportByName(
-  TARGET_DLL,
-  "?Read@EncAndDesMediaFile@@QAEKPAEK_J@Z"
-);
+// 分块读取的块大小。一次性申请整个文件大小的内存没必要，
+// 30MB 以上的曲目很常见。
+var CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
 
-var EncAndDesMediaFileConstructor = new NativeFunction(
-  EncAndDesMediaFileConstructorAddr,
-  "pointer",
-  ["pointer"],
-  "thiscall"
-);
+function bindApi() {
+  var module = Process.getModuleByName(TARGET_DLL); // 未加载时直接抛出，信息清晰
+  var addr = {};
+  Object.keys(SYMBOLS).forEach(function (key) {
+    addr[key] = module.getExportByName(SYMBOLS[key]); // 缺失时抛出，不会静默变 null
+  });
 
-var EncAndDesMediaFileDestructor = new NativeFunction(
-  EncAndDesMediaFileDestructorAddr,
-  "void",
-  ["pointer"],
-  "thiscall"
-);
+  return {
+    construct: new NativeFunction(addr.construct, 'void', ['pointer'], 'thiscall'),
+    destruct: new NativeFunction(addr.destruct, 'void', ['pointer'], 'thiscall'),
+    open: new NativeFunction(addr.open, 'bool', ['pointer', 'pointer', 'bool', 'bool'], 'thiscall'),
+    close: new NativeFunction(addr.close, 'void', ['pointer'], 'thiscall'),
+    isOpen: new NativeFunction(addr.isOpen, 'bool', ['pointer'], 'thiscall'),
+    size: new NativeFunction(addr.size, 'uint32', ['pointer'], 'thiscall'),
+    // Read(unsigned char* buffer, unsigned long length, __int64 offset)
+    read: new NativeFunction(addr.read, 'uint32', ['pointer', 'pointer', 'uint32', 'int64'], 'thiscall'),
+  };
+}
 
-var EncAndDesMediaFileOpen = new NativeFunction(
-  EncAndDesMediaFileOpenAddr,
-  "bool",
-  ["pointer", "pointer", "bool", "bool"],
-  "thiscall"
-);
+function readAll(api, instance, totalBytes, targetPath) {
+  var file = new File(targetPath, 'wb');
+  var buffer = Memory.alloc(CHUNK_SIZE);
+  var written = 0;
 
-var EncAndDesMediaFileGetSize = new NativeFunction(
-  EncAndDesMediaFileGetSizeAddr,
-  "uint32",
-  ["pointer"],
-  "thiscall"
-);
-
-var EncAndDesMediaFileRead = new NativeFunction(
-  EncAndDesMediaFileReadAddr,
-  "uint",
-  ["pointer", "pointer", "uint32", "uint64"],
-  "thiscall"
-);
+  try {
+    while (written < totalBytes) {
+      var want = Math.min(CHUNK_SIZE, totalBytes - written);
+      var got = api.read(instance, buffer, want, written);
+      if (got === 0) {
+        throw new Error('读取在偏移 ' + written + ' 处中断（期望共 ' + totalBytes + ' 字节）');
+      }
+      file.write(buffer.readByteArray(got));
+      written += got;
+    }
+  } finally {
+    file.close();
+  }
+}
 
 rpc.exports = {
-  decrypt: function (srcFileName, tmpFileName) {
-    var EncAndDesMediaFileObject = Memory.alloc(0x28);
-    EncAndDesMediaFileConstructor(EncAndDesMediaFileObject);
+  // 由 Python 侧通过 script.exports_sync.decrypt(src, dst) 调用。
+  decrypt: function (sourcePath, targetPath) {
+    var api = bindApi();
+    var instance = Memory.alloc(INSTANCE_SIZE);
+    var opened = false;
 
-    var fileNameUtf16 = Memory.allocUtf16String(srcFileName);
-    EncAndDesMediaFileOpen(EncAndDesMediaFileObject, fileNameUtf16, 1, 0);
+    try {
+      api.construct(instance);
 
-    var fileSize = EncAndDesMediaFileGetSize(EncAndDesMediaFileObject);
+      // Open(const wchar_t* path, bool, bool) —— 后两个标志沿用调用方惯例的 (1, 0)。
+      if (!api.open(instance, Memory.allocUtf16String(sourcePath), 1, 0) || !api.isOpen(instance)) {
+        throw new Error('无法打开源文件: ' + sourcePath);
+      }
+      opened = true;
 
-    var buffer = Memory.alloc(fileSize);
-    EncAndDesMediaFileRead(EncAndDesMediaFileObject, buffer, fileSize, 0);
+      var totalBytes = api.size(instance);
+      if (totalBytes === 0) {
+        throw new Error('源文件大小读取失败（或为空）: ' + sourcePath);
+      }
 
-    var data = buffer.readByteArray(fileSize);
-    EncAndDesMediaFileDestructor(EncAndDesMediaFileObject);
-    
-    var tmpFile = new File(tmpFileName, "wb");
-    tmpFile.write(data);
+      readAll(api, instance, totalBytes, targetPath);
+    } finally {
+      // 无论成功还是抛错都要释放：Close 关掉文件句柄，析构释放对象内部资源。
+      // 漏掉这一步会让源文件被一直占用，Windows 上连删除都会失败。
+      if (opened) {
+        api.close(instance);
+      }
+      api.destruct(instance);
+    }
   },
 };

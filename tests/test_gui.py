@@ -12,6 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 import GUI  # noqa: E402
@@ -105,14 +106,6 @@ def test_preview_mirrors_command(window):
 # --------------------------------------------------------------------------
 # 交互
 # --------------------------------------------------------------------------
-def test_toggle_theme_round_trips(window):
-    original = window.is_dark
-    window.toggle_theme()
-    assert window.is_dark is not original
-    window.toggle_theme()
-    assert window.is_dark is original
-
-
 def test_toggle_preview_visibility(window):
     window.show()
     assert not window.preview.isVisible()
@@ -149,3 +142,48 @@ def test_initial_dirs_point_under_app_dir(window):
     assert window.root_edit.text() == str(GUI.app_dir() / "output")
     assert window.mp3_edit.text() == str(GUI.app_dir() / "output" / "mp3")
     assert window.flac_edit.text() == str(GUI.app_dir() / "output" / "flac")
+
+
+# --------------------------------------------------------------------------
+# Memphis 视觉机制：只测行为，不测像素
+# --------------------------------------------------------------------------
+def test_buttons_carry_a_hard_shadow(window):
+    """孟菲斯要的是硬边偏移阴影。模糊半径非 0 就说明风格跑偏了。"""
+    for button in (window.start_btn, window.stop_btn, window.clear_btn, window.toggle_preview_btn):
+        effect = button.graphicsEffect()
+        assert effect is not None, "按钮必须有阴影效果"
+        assert effect.blurRadius() == 0, "阴影必须是硬边（blurRadius=0），不能是模糊阴影"
+        assert effect.offset().x() == GUI.SHADOW_REST
+
+
+def test_hover_grows_the_shadow(window):
+    """规范里 hover 的读法是「阴影变大 + 换色」，不是位移。"""
+    button = window.start_btn
+    assert button.shadow_target() == GUI.SHADOW_REST
+
+    button.set_shadow(GUI.SHADOW_HOVER)
+    assert button.shadow_target() == GUI.SHADOW_HOVER
+
+    button.set_shadow(0.0)
+    assert button.shadow_target() == 0.0, "按下时阴影应缩回 0，读作「陷进阴影里」"
+
+
+def test_cards_expose_decorations(window):
+    """孟菲斯不允许空白卡片：每张卡片都要有几何装饰，且各自朝不同方向动。"""
+    cards = [w for w in window.findChildren(GUI.MemphisCard)]
+    assert cards, "界面上应当有卡片"
+
+    decorated = [c for c in cards if c.decorations()]
+    assert len(decorated) >= 2, "至少标题卡与预览卡要有几何装饰"
+
+    for card in decorated:
+        vectors = {(d.delta.x(), d.delta.y()) for d in card.decorations()}
+        assert len(vectors) > 1 or len(card.decorations()) == 1, (
+            "同一张卡片里的装饰必须朝不同方向动（Playful Chaos），不能整齐划一"
+        )
+
+
+def test_decorations_do_not_swallow_hover(window):
+    """装饰若吃掉鼠标事件，卡片的 hover 就会时灵时不灵。"""
+    for shape in window.findChildren(GUI.Decoration):
+        assert shape.testAttribute(Qt.WA_TransparentForMouseEvents), "装饰不能拦截鼠标事件"

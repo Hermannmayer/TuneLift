@@ -4,7 +4,15 @@
 
 .DESCRIPTION
     ffmpeg 体积太大，不适合进版本库，所以 build.bat 需要它先在位。
-    默认取 gyan.dev 的 essentials 静态构建：体积小、依赖少，够用。
+
+    默认取 BtbN/FFmpeg-Builds 的 **LGPL** 变体。这一点是刻意的：
+    gyan.dev 的构建全部是 GPLv3（页面原话 "All builds are ... licensed as GPLv3"），
+    而 GPLv3 要求随包提供对应源码；LGPLv3 只需附许可证全文并保持可替换，
+    对一个独立调用的 exe 来说负担小得多。
+
+    LGPL 变体不含 --enable-gpl，因此没有 libx264/libx265 这些 GPL-only 组件。
+    本项目只用音频解码 + MP3 编码（libmp3lame，同样是 LGPL），用不到它们。
+
     文件已经存在时直接跳过，方便反复调用。
 
 .EXAMPLE
@@ -16,7 +24,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip',
+    [string]$Url = 'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl.zip',
     [string]$Destination
 )
 

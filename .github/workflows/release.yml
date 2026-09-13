@@ -41,8 +41,15 @@ jobs:
           & .\dist\TuneLift\main.exe --help | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "main.exe --help 退出码 $LASTEXITCODE" }
 
-          foreach ($name in 'TuneLift.exe', 'main.exe', 'tunelift.ico', '_internal') {
+          foreach ($name in 'TuneLift.exe', 'main.exe', 'tunelift.ico', '_internal',
+                           'LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES.md') {
             if (-not (Test-Path "dist\TuneLift\$name")) { throw "打包结果缺少 $name" }
+          }
+          if (-not (Test-Path 'dist\TuneLift\LICENSES\Qt-LGPL-3.0-only.txt')) {
+            throw '打包结果缺少 Qt 的 LGPLv3 全文'
+          }
+          if (-not (Test-Path 'dist\TuneLift\LICENSES\FFmpeg-LGPL-3.0.txt')) {
+            throw '打包结果缺少 FFmpeg 的 LGPLv3 全文'
           }
 
       - name: 压缩

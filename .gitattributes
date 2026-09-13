@@ -20,3 +20,6 @@ NOTICE  text eol=lf
 *.ico   binary
 *.png   binary
 *.exe   binary
+
+# 许可正文要求逐字复制、不得更改，所以不做任何换行符转换，按二进制保存
+LICENSES/** -text

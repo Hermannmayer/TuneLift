@@ -65,6 +65,17 @@ jobs:
           }
           if (-not (Test-Path 'dist\TuneLift\_internal')) { throw '打包结果缺少 _internal' }
 
+          # 许可文件必须随包分发（Qt 与 FFmpeg 都是 LGPLv3）
+          foreach ($name in 'LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES.md') {
+            if (-not (Test-Path "dist\TuneLift\$name")) { throw "打包结果缺少 $name" }
+          }
+          if (-not (Test-Path 'dist\TuneLift\LICENSES\Qt-LGPL-3.0-only.txt')) {
+            throw '打包结果缺少 Qt 的 LGPLv3 全文'
+          }
+          if (-not (Test-Path 'dist\TuneLift\LICENSES\FFmpeg-LGPL-3.0.txt')) {
+            throw '打包结果缺少 FFmpeg 的 LGPLv3 全文'
+          }
+
       - name: 上传自检产物
         uses: actions/upload-artifact@v4
         with:

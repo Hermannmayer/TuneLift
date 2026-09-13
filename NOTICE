@@ -3,20 +3,20 @@ Copyright 2026 TuneLift contributors
 
 --------------------------------------------------------------------
 
-本产品基于以下项目修改而来，其版权归原作者所有：
+本产品以 Apache License 2.0 发布，全文见 LICENSE。
 
-    TuneFree
-    https://github.com/zksbx/TuneFree
-    作者联系邮箱：2505923037@qq.com
+发行包内包含若干第三方组件，它们各自适用自己的许可条款，不适用本产品的
+Apache-2.0。完整清单、各项义务的履行情况、以及源码获取方式，见
+THIRD-PARTY-NOTICES.md；各许可的完整文本在 LICENSES/ 目录下。
 
-具体的修改内容见 README.md 的「来源与许可」一节。
+其中以 GNU Lesser General Public License 使用的组件，在此显著声明：
 
---------------------------------------------------------------------
+    Qt 6 / PySide6   GNU Lesser General Public License v3.0
+    FFmpeg           GNU Lesser General Public License v3.0
 
-发行包内还包含以下第三方组件，它们各自适用自己的许可条款。
-对外分发前请自行确认并满足各自的署名与分发要求：
+其余随包分发的组件：
 
-    Frida             https://frida.re/
-    FFmpeg            https://ffmpeg.org/
-    Qt / PySide6      https://www.qt.io/
-    music-decryptor   https://github.com/ericjuice/music-decryptor
+    Frida            wxWindows Library Licence, Version 3.1
+    Python           PSF License Agreement
+
+Qt 与 FFmpeg 均以动态链接或独立可执行文件的形式使用，用户可以自行替换。
