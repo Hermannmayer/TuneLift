@@ -45,6 +45,9 @@ jobs:
 
       - name: 准备 ffmpeg.exe
         shell: pwsh
+        env:
+          # 传进去是为了查 release 资产时用带认证的 API，避免撞匿名速率限制
+          GITHUB_TOKEN: ${{ github.token }}
         run: ./scripts/fetch_ffmpeg.ps1
 
       - name: 打包
